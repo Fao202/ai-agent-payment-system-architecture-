@@ -90,9 +90,9 @@ Layer Breakdown & Technical Decisions:
 
  * API Gateway: Validates JWT signature.
 
-  ■ Rate Limiting Decision: We use a Redis Token Bucket applied AFTER authentication. Why? To prevent unauthenticated bots from consuming rate limit quotas and to apply stricter limits based on user identity.
+    ■ Rate Limiting Decision: We use a Redis Token Bucket applied AFTER authentication. Why? To prevent unauthenticated bots from consuming rate limit quotas and to apply stricter limits based on user identity.
 
-  ■ Based Routing: Routes role="root" to Management Services. Strictly blocks role="ai_spend_only" from accessing admin endpoints (e.g., blocks /popup routes).
+    ■ Based Routing: Routes role="root" to Management Services. Strictly blocks role="ai_spend_only" from accessing admin endpoints (e.g., blocks /popup routes).
 
 
 4. Application Layer (Role-Based Services & Risk Engine)
@@ -103,9 +103,9 @@ Layer Breakdown & Technical Decisions:
   
   ■ Risk Engineering (Level 5 - Internal): Evaluates every transaction using Velocity Checks (Redis), Anomaly Detection, and Fraud Scoring.
 
- ■ Decisions: ALLOW ➔ Pass | BLOCK ➔ Reject. If CHALLENGE, triggers Step-Up Auth (Human biometric approval).
+  ■ Decisions: ALLOW ➔ Pass | BLOCK ➔ Reject. If CHALLENGE, triggers Step-Up Auth (Human biometric approval).
 
- ■ ACID Transaction: Executes Lock Row ➔ Deduct Funds ➔ Commit in MySQL to prevent race conditions.
+  ■ ACID Transaction: Executes Lock Row ➔ Deduct Funds ➔ Commit in MySQL to prevent race conditions.
 
 
 * Top-up Service (Human Only - Inbound Funds):
@@ -125,11 +125,11 @@ Layer Breakdown & Technical Decisions:
 
 5. Async Processing Layer (Zero Data Loss & Reconciliation)
    
- *AWS SQS (Durable, Disk-based Queue): Why SQS? If a background worker crashes mid-processing, SQS Worker Death Recovery (via Visibility Timeout) ensures the message returns to the queue for another worker to process. This guarantees zero data loss.
+ * AWS SQS (Durable, Disk-based Queue): Why SQS? If a background worker crashes mid-processing, SQS Worker Death Recovery (via Visibility Timeout) ensures the message returns to the queue for another worker to process. This guarantees zero data loss.
 
 * Message Flow:
 
-  1. Payment Q ➔ 2. Update Q ➔ 3. Receipt Q ➔ 4. Top-up Q ➔ 5. Statement Q.
+1. Payment Q ➔ 2. Update Q ➔ 3. Receipt Q ➔ 4. Top-up Q ➔ 5. Statement Q.
   
 * Background Workers:
   
