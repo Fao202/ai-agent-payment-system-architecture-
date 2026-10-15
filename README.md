@@ -148,16 +148,16 @@ Layer Breakdown & Technical Decisions:
 
 7. Data Layer (Multi-Storage & Encryption)
    
-  ■ Amazon Aurora MySQL: Source of Truth for Wallets/Transactions (ACID).
+   ■ Amazon Aurora MySQL: Source of Truth for Wallets/Transactions (ACID).
 
-  ■ Amazon DynamoDB: High-speed Idempotency Keys (TTL: 7 days) to prevent double-charging during network retries.
+   ■ Amazon DynamoDB: High-speed Idempotency Keys (TTL: 7 days) to prevent double-charging during network retries.
 
-  ■ Amazon ElastiCache (Redis): Sub-millisecond Rate Limiting and Fraud Score caching (TTL: 60 seconds to ensure fresh data).
+   ■ Amazon ElastiCache (Redis): Sub-millisecond Rate Limiting and Fraud Score caching (TTL: 60 seconds to ensure fresh data).
 
-  ■ AWS KMS (Key Management Service): Security Decision. Enforces Encrypt at Rest, Encrypt in Transit, and automatic Key 
+   ■ AWS KMS (Key Management Service): Security Decision. Enforces Encrypt at Rest, Encrypt in Transit, and automatic Key 
 Rotation for all sensitive financial data.
 
-  ■ S3 / Object Store: Secure storage for Receipts, Audit Logs, and Top-up Statements.
+   ■ S3 / Object Store: Secure storage for Receipts, Audit Logs, and Top-up Statements.
 
 
 8. Observability & Reliability
@@ -421,11 +421,11 @@ Before traffic even reaches our VPC, it passes through a multi-layered AWS Edge 
 
 The Public Subnet houses internet-facing resources. It is heavily restricted using both NACLs and Security Groups.
 
- ■ Network ACL (NACL): Acts as the stateless subnet firewall.
+  ■ Network ACL (NACL): Acts as the stateless subnet firewall.
 
-  • Inbound: Explicitly allows only Port 443 (HTTPS) from the internet.
+   • Inbound: Explicitly allows only Port 443 (HTTPS) from the internet.
   
-  • Outbound: Allows all traffic on ephemeral ports (0.0.0.0/0 - 65535) to allow return traffic from the ALB.
+   • Outbound: Allows all traffic on ephemeral ports (0.0.0.0/0 - 65535) to allow return traffic from the ALB.
  
 ■ Application Load Balancer (ALB): Protected by SG_ALB, which strictly allows Inbound Port 443 ONLY from the AWS WAF Prefix List.
 
@@ -463,13 +463,13 @@ This subnet houses the crown jewels: Amazon Aurora (MySQL) and ElastiCache (Redi
 
  ■ Security Group (SG_Data):
 
-  • Inbound: Allows Ports 3306/6379 ONLY from SG_Compute.
+   • Inbound: Allows Ports 3306/6379 ONLY from SG_Compute.
 
-  • Outbound: DENY ALL. The database is never allowed to initiate outbound connections.
+   • Outbound: DENY ALL. The database is never allowed to initiate outbound connections.
 
  ■ Route Table (Strict Isolation): Contains ONLY the Local Route (10.0.0.0/16 ➔ Local).
 
-  • NO Internet Route. NO NAT Gateway Route. The database is physically incapable of reaching the internet.
+   • NO Internet Route. NO NAT Gateway Route. The database is physically incapable of reaching the internet.
 
 ** Step 5: High Availability & Inter-AZ Communication
 
@@ -497,9 +497,9 @@ Figure X: Multi-Region Warm Standby Architecture featuring automated Route 53 fa
  
 This region handles 100% of the production traffic under normal operating conditions.
 
- ■ Compute: ECS / Lambda runs at Full Scale to handle peak transaction loads.
+  ■ Compute: ECS / Lambda runs at Full Scale to handle peak transaction loads.
 
- ■ Data Stores: Hosts the Aurora MySQL Writer, DynamoDB Primary Table, S3 Primary Bucket, and ElastiCache (Redis) Primary node.
+  ■ Data Stores: Hosts the Aurora MySQL Writer, DynamoDB Primary Table, S3 Primary Bucket, and ElastiCache (Redis) Primary node.
 
 🔵 3. DR Region: eu-west-1 (Passive / Warm Standby)
  
@@ -513,24 +513,24 @@ This region sits ready to take over instantly, but runs at a minimal footprint t
 
 To achieve our strict SLA targets, every data layer utilizes AWS's native cross-region replication capabilities:
 
-  ■ Amazon Aurora Global Database: Replicates transaction logs from the us-east-1 Writer to the eu-west-1 Read Replica with sub-second latency.
+   ■ Amazon Aurora Global Database: Replicates transaction logs from the us-east-1 Writer to the eu-west-1 Read Replica with sub-second latency.
 
-  ■ DynamoDB Global Tables: Provides multi-active, cross-region replication for our Idempotency Keys and transaction records.
+   ■ DynamoDB Global Tables: Provides multi-active, cross-region replication for our Idempotency Keys and transaction records.
 
- ■ S3 Cross-Region Replication (CRR): Automatically copies encrypted PDF receipts and audit logs to the DR bucket.
+   ■ S3 Cross-Region Replication (CRR): Automatically copies encrypted PDF receipts and audit logs to the DR bucket.
 
- ■ Redis Global Datastore: Replicates the in-memory cache (Rate limits, Fraud scores) to the DR region to ensure the Risk Engine functions immediately upon failover.
+  ■ Redis Global Datastore: Replicates the in-memory cache (Rate limits, Fraud scores) to the DR region to ensure the Risk Engine functions immediately upon failover.
 
 
 5. Recovery Metrics (SLA Targets)
    
 This architecture is engineered to meet the strictest financial industry SLAs:
 
-■ RPO (Recovery Point Objective): < 1 Second**
+ ■ RPO (Recovery Point Objective): < 1 Second**
 
- • Definition: How much data might we lose in a disaster?
+  • Definition: How much data might we lose in a disaster?
  
- • How we achieve it: Because Aurora Global DB and DynamoDB Global Tables replicate data continuously at the storage layer, our data loss window is less than one second.
+  • How we achieve it: Because Aurora Global DB and DynamoDB Global Tables replicate data continuously at the storage layer, our data loss window is less than one second.
  
 ■ RTO (Recovery Time Objective): < 2 Minutes
 
@@ -577,43 +577,43 @@ Detailed Cost Breakdown
 
 1. Compute Layer (~$510 / 24%) - ✅ Excellent (Serverless scales to zero)
 
- • API Gateway: 3M requests/mo @ $3.50/M = $10
+  • API Gateway: 3M requests/mo @ $3.50/M = $10
 
- • AWS Lambda: 6M invocations (512MB, 500ms avg) = $50
+  • AWS Lambda: 6M invocations (512MB, 500ms avg) = $50
 
- • ECS Fargate: 4 Tasks (2 vCPU, 4GB RAM) running 24/7 across 2 AZs = $450
+  • ECS Fargate: 4 Tasks (2 vCPU, 4GB RAM) running 24/7 across 2 AZs = $450
 
  
 
 2. Data Layer (~$945 / 44%) - ⚠️ Moderate (Aurora is the biggest cost driver)
    
- • Aurora MySQL: 2x db.r6g.large (Multi-AZ) + 100GB Storage + I/O = $720
+  • Aurora MySQL: 2x db.r6g.large (Multi-AZ) + 100GB Storage + I/O = $720
 
- • Amazon DynamoDB: 100GB Storage (On-Demand) for Idempotency/Keys = $75
+  • Amazon DynamoDB: 100GB Storage (On-Demand) for Idempotency/Keys = $75
 
- • ElastiCache Redis: 2x cache.t3.medium nodes (Multi-AZ) for Fraud/Cache = $150
+  • ElastiCache Redis: 2x cache.t3.medium nodes (Multi-AZ) for Fraud/Cache = $150
 
  
 
 3. Network & Security (~$650 / 30%) - 🚨 High (Premium security features)
    
- • Network Firewall: 2 Endpoints (1 per AZ) @ $0.395/hr = $576
+  • Network Firewall: 2 Endpoints (1 per AZ) @ $0.395/hr = $576
 
- • NAT Gateways: 2 Gateways fixed fee ($32x2) + 10GB data processing = $65
+  • NAT Gateways: 2 Gateways fixed fee ($32x2) + 10GB data processing = $65
 
- • AWS WAF & Shield: Web ACL + 3M requests = $8
+  • AWS WAF & Shield: Web ACL + 3M requests = $8
 
- • Route 53: Hosted Zone + 3M DNS queries = $2
+  • Route 53: Hosted Zone + 3M DNS queries = $2
 
  
 
 4. Storage & Observability (~$50 / 2%) - ✅ Excellent (Very low cost)
    
- • Amazon S3: 30GB (PDF Receipts + VPC Flow Logs) = $1
+  • Amazon S3: 30GB (PDF Receipts + VPC Flow Logs) = $1
 
- • CloudWatch: 50GB Log ingestion + Alarms = $35
+  • CloudWatch: 50GB Log ingestion + Alarms = $35
 
- • AWS X-Ray: 3M Traces for distributed tracing = $15
+  • AWS X-Ray: 3M Traces for distributed tracing = $15
 
  
 
@@ -644,56 +644,56 @@ Quick Wins (Immediate Implementation)
  
 1. Zero-Trust AI Financial Isolation (Blast Radius Containment)
    
-  • The Decision: We never give the AI Agent direct access to the main corporate bank account. Instead, we created an Isolated AI Wallet with strict daily spend limits.
+   • The Decision: We never give the AI Agent direct access to the main corporate bank account. Instead, we created an Isolated AI Wallet with strict daily spend limits.
  
-  • The Problem Solved: AI models can hallucinate, be prompt-injected, or compromised. If an AI goes rogue, it shouldn't be able to drain the company's main funds.
+   • The Problem Solved: AI models can hallucinate, be prompt-injected, or compromised. If an AI goes rogue, it shouldn't be able to drain the company's main funds.
  
-  • The Impact: Limits the financial blast radius strictly to the allocated funds in the isolated wallet, ensuring absolute financial safety.
+   • The Impact: Limits the financial blast radius strictly to the allocated funds in the isolated wallet, ensuring absolute financial safety.
   
  
 2. Asynchronous 3-Queue Processing Pattern (Zero Data Loss)
    
- • The Decision: We decoupled the core transaction from external API calls using three distinct SQS queues: Payment Q ➔ Update Q Receipt Q.
+  • The Decision: We decoupled the core transaction from external API calls using three distinct SQS queues: Payment Q ➔ Update Q Receipt Q.
 
- • The Problem Solved: External Bank and Merchant APIs are slow, prone to timeouts, and can drop webhooks. If we processed these synchronously, a slow API would block the system, cause thread exhaustion, and lose transactions if a worker crashed.
+  • The Problem Solved: External Bank and Merchant APIs are slow, prone to timeouts, and can drop webhooks. If we processed these synchronously, a slow API would block the system, cause thread exhaustion, and lose transactions if a worker crashed.
 
- • The Impact: Guarantees Zero Data Loss. If a worker crashes, SQS's Visibility Timeout ensures the message returns to the queue for another worker. The intermediate "Update Queue" protects the core MySQL database from direct worker pressure.
+  • The Impact: Guarantees Zero Data Loss. If a worker crashes, SQS's Visibility Timeout ensures the message returns to the queue for another worker. The intermediate "Update Queue" protects the core MySQL database from direct worker pressure.
 
 
 3. Strict Financial Consistency (Idempotency & Row Locking)
    
- • The Decision: We implemented DynamoDB Idempotency Keys (with 7-day TTL) for network retries, and MySQL SELECT FOR UPDATE (Row-Level Locking) for concurrent requests.
+  • The Decision: We implemented DynamoDB Idempotency Keys (with 7-day TTL) for network retries, and MySQL SELECT FOR UPDATE (Row-Level Locking) for concurrent requests.
  
- • The Problem Solved: In financial systems, network glitches cause duplicate requests. Without idempotency, a user gets double-charged. Without row locking, an AI could spend the same $50 twice simultaneously (a race condition).
+  • The Problem Solved: In financial systems, network glitches cause duplicate requests. Without idempotency, a user gets double-charged. Without row locking, an AI could spend the same $50 twice simultaneously (a race condition).
 
- • The Impact: Guarantees ACID compliance and prevents double-charging or overspending, even under high-concurrency AI traffic.
+  • The Impact: Guarantees ACID compliance and prevents double-charging or overspending, even under high-concurrency AI traffic.
 
 
 4. Defense-in-Depth Network Routing (Local vs. NAT)
   
-  • The Decision: Internal communication between the Compute and Data subnets uses the VPC Local Route (10.0.0.0/16 ➔ local), completely bypassing the NAT Gateway. The NAT Gateway is strictly reserved for outbound internet traffic to the Bank API.
+   • The Decision: Internal communication between the Compute and Data subnets uses the VPC Local Route (10.0.0.0/16 ➔ local), completely bypassing the NAT Gateway. The NAT Gateway is strictly reserved for outbound internet traffic to the Bank API.
   
-  • The Problem Solved: Routing internal database traffic through a NAT Gateway is slow, insecure, and incurs unnecessary AWS data processing charges. Furthermore, the database must be completely air-gapped from the internet.
+   • The Problem Solved: Routing internal database traffic through a NAT Gateway is slow, insecure, and incurs unnecessary AWS data processing charges. Furthermore, the database must be completely air-gapped from the internet.
   
-  • The Impact: Keeps internal traffic on the secure, free AWS backbone. The Private Data Subnet has NO Internet Route, making the database physically incapable of being breached from the outside.
+   • The Impact: Keeps internal traffic on the secure, free AWS backbone. The Private Data Subnet has NO Internet Route, making the database physically incapable of being breached from the outside.
   
   
 5. Strict Outbound Data Exfiltration Prevention
    
-  • The Decision: The SG_Compute Security Group outbound rule is restricted to TCP Port 443 ONLY to the specific IP address of the Third-Party Bank API.
+   • The Decision: The SG_Compute Security Group outbound rule is restricted to TCP Port 443 ONLY to the specific IP address of the Third-Party Bank API.
   
-  • The Problem Solved: If a hacker compromises a Lambda function or ECS container, they will try to "phone home" and exfiltrate database credentials to their own rogue server.
+   • The Problem Solved: If a hacker compromises a Lambda function or ECS container, they will try to "phone home" and exfiltrate database credentials to their own rogue server.
   
-  • The Impact: Even if the compute layer is compromised, the Security Group drops the packet because the destination IP doesn't match the Bank's IP. Combined with the AWS Network Firewall, this creates an impenetrable outbound boundary.
+   • The Impact: Even if the compute layer is compromised, the Security Group drops the packet because the destination IP doesn't match the Bank's IP. Combined with the AWS Network Firewall, this creates an impenetrable outbound boundary.
   
   
 6. Cost-Optimized Multi-Region Warm Standby (BCP)
    
- • The Decision: We chose a Warm Standby architecture (Active-Passive) over a Multi-Active setup, keeping only 1 minimum compute instance running in the DR region (eu-west-1), while relying on Aurora Global DB and DynamoDB Global Tables for data.
+  • The Decision: We chose a Warm Standby architecture (Active-Passive) over a Multi-Active setup, keeping only 1 minimum compute instance running in the DR region (eu-west-1), while relying on Aurora Global DB and DynamoDB Global Tables for data.
  
- • The Problem Solved: Running a fully active second region doubles the infrastructure cost. Running a "Pilot Light" (cold) region takes too long to boot up during a disaster.
+  • The Problem Solved: Running a fully active second region doubles the infrastructure cost. Running a "Pilot Light" (cold) region takes too long to boot up during a disaster.
  
- • The Impact: Achieves an RPO of < 1 Second (near-zero data loss) and an RTO of < 2 Minutes (rapid recovery), while keeping the DR infrastructure costs significantly lower than a fully active setup.
+  • The Impact: Achieves an RPO of < 1 Second (near-zero data loss) and an RTO of < 2 Minutes (rapid recovery), while keeping the DR infrastructure costs significantly lower than a fully active setup.
 
 
 # License & Attribution
