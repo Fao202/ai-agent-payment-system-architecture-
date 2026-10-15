@@ -68,9 +68,9 @@ Layer Breakdown & Technical Decisions:
 
 1. Client Layer (Strict Role Separation)
    
- *Human Root User: Authenticates via Email + Password + Biometric. Has full system control.
+  ■ Human Root User: Authenticates via Email + Password + Biometric. Has full system control.
 
- * AI Agent (Restricted): Authenticates via AaSN API Key. Strictly limited to "Spend Only" actions to minimize blast radius.
+  ■ AI Agent (Restricted): Authenticates via AaSN API Key. Strictly limited to "Spend Only" actions to minimize blast radius.
   
 
 2. Edge Security & Resilience Layer
@@ -101,26 +101,26 @@ Layer Breakdown & Technical Decisions:
   
  * Payment Service (AI & Human):
   
-  ■ Risk Engineering (Level 5 - Internal): Evaluates every transaction using Velocity Checks (Redis), Anomaly Detection, and Fraud Scoring.
+ ■ Risk Engineering (Level 5 - Internal): Evaluates every transaction using Velocity Checks (Redis), Anomaly Detection, and Fraud Scoring.
 
-  ■ Decisions: ALLOW ➔ Pass | BLOCK ➔ Reject. If CHALLENGE, triggers Step-Up Auth (Human biometric approval).
+ ■ Decisions: ALLOW ➔ Pass | BLOCK ➔ Reject. If CHALLENGE, triggers Step-Up Auth (Human biometric approval).
 
-  ■ ACID Transaction: Executes Lock Row ➔ Deduct Funds ➔ Commit in MySQL to prevent race conditions.
+ ■ ACID Transaction: Executes Lock Row ➔ Deduct Funds ➔ Commit in MySQL to prevent race conditions.
 
 
 * Top-up Service (Human Only - Inbound Funds):
   
- ■ Dedicated service for funding the AI Isolated Wallet. It manages the complex, asynchronous nature of external bank transfers.
+  ■ Dedicated service for funding the AI Isolated Wallet. It manages the complex, asynchronous nature of external bank transfers.
 
- ■ Webhook Handler: Receives asynchronous callbacks from the Bank API. 
+  ■ Webhook Handler: Receives asynchronous callbacks from the Bank API. 
 
- ■ Security Decision: Strictly verifies TLS & Webhook Signatures on every callback to prevent malicious actors from spoofing bank responses to falsely credit accounts.
+  ■ Security Decision: Strictly verifies TLS & Webhook Signatures on every callback to prevent malicious actors from spoofing bank responses to falsely credit accounts.
 
- ■ Polling Mechanism: Resiliency Decision: Because external banks can sometimes drop or delay webhooks, we implement a fallback Polling Handler that periodically checks the bank's status API to ensure no top-up is left in a "pending" state forever.
+  ■ Polling Mechanism: Resiliency Decision: Because external banks can sometimes drop or delay webhooks, we implement a fallback Polling Handler that periodically checks the bank's status API to ensure no top-up is left in a "pending" state forever.
 
- ■ Bank Reconciliation: Consistency Decision: A dedicated Reconciliation Handler runs periodically to match our internal Aurora ledger with the actual bank statements. This guarantees 100% financial accuracy and automatically unblocks any transactions that got stuck due to network glitches.
+  ■ Bank Reconciliation: Consistency Decision: A dedicated Reconciliation Handler runs periodically to match our internal Aurora ledger with the actual bank statements. This guarantees 100% financial accuracy and automatically unblocks any transactions that got stuck due to network glitches.
 
- ■ Decision: By isolating these heavy, asynchronous bank integrations (Webhooks/Polling/Reconciliation) into the Top-up Service, we ensure they never cause thread exhaustion or latency in the high-frequency AI Payment Service.
+  ■ Decision: By isolating these heavy, asynchronous bank integrations (Webhooks/Polling/Reconciliation) into the Top-up Service, we ensure they never cause thread exhaustion or latency in the high-frequency AI Payment Service.
 
 
 5. Async Processing Layer (Zero Data Loss & Reconciliation)
