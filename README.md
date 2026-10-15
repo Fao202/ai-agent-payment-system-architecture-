@@ -162,11 +162,11 @@ Rotation for all sensitive financial data.
 
 8. Observability & Reliability
     
-  ■ Monitoring: CloudWatch Dashboards and Centralized Logging (CloudWatch Logs / ELK Stack) for deep log analysis.
+   ■ Monitoring: CloudWatch Dashboards and Centralized Logging (CloudWatch Logs / ELK Stack) for deep log analysis.
 
-  ■ Alerting: PagerDuty/Slack integration for Critical Errors. Decision: Triggers immediate alert if DLQ > 10 messages, indicating a systemic failure.
+   ■ Alerting: PagerDuty/Slack integration for Critical Errors. Decision: Triggers immediate alert if DLQ > 10 messages, indicating a systemic failure.
 
-  ■ Auto-Healing: Health checks every 30s ensure 99.99% uptime.
+   ■ Auto-Healing: Health checks every 30s ensure 99.99% uptime.
 
  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
