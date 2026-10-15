@@ -68,27 +68,27 @@ Layer Breakdown & Technical Decisions:
 
 1. Client Layer (Strict Role Separation)
    
-  ■ Human Root User: Authenticates via Email + Password + Biometric. Has full system control.
+   ■ Human Root User: Authenticates via Email + Password + Biometric. Has full system control.
 
-  ■ AI Agent (Restricted): Authenticates via AaSN API Key. Strictly limited to "Spend Only" actions to minimize blast radius.
+   ■ AI Agent (Restricted): Authenticates via AaSN API Key. Strictly limited to "Spend Only" actions to minimize blast radius.
   
 
 2. Edge Security & Resilience Layer
    
- * Traffic Flow: Route 53 (Geo Routing) ➔ AWS WAF (IP/DDoS Protection) ➔ Application Load Balancer.
+  * Traffic Flow: Route 53 (Geo Routing) ➔ AWS WAF (IP/DDoS Protection) ➔ Application Load Balancer.
 
- * Security Decision: TLS/HTTPS Termination happens at the Load Balancer, ensuring all data is Encrypted in Transit across the public internet.
+  * Security Decision: TLS/HTTPS Termination happens at the Load Balancer, ensuring all data is Encrypted in Transit across the public internet.
 
- * Resilience Decision: ALB performs Health Checks every 30 seconds for Auto-healing (replacing failed instances) and Auto-scaling (handling traffic spikes).
+  * Resilience Decision: ALB performs Health Checks every 30 seconds for Auto-healing (replacing failed instances) and Auto-scaling (handling traffic spikes).
 
- * VCP Decision: [US Region ACTIVE] ➔ failover ➔ [EU Region PASSIVE]. We use an Active-Passive model to keep DR costs low while maintaining rapid recovery.
+  * VCP Decision: [US Region ACTIVE] ➔ failover ➔ [EU Region PASSIVE]. We use an Active-Passive model to keep DR costs low while maintaining rapid recovery.
   
 
 3. Authentication & Authorization Layer
    
- * Auth Server (Cognito): Issues a short-lived JWT Access Token (15 min) and a secure Refresh Token (30 days). Includes token rotation and theft detection.
+  * Auth Server (Cognito): Issues a short-lived JWT Access Token (15 min) and a secure Refresh Token (30 days). Includes token rotation and theft detection.
 
- * API Gateway: Validates JWT signature.
+  * API Gateway: Validates JWT signature.
 
     ■ Rate Limiting Decision: We use a Redis Token Bucket applied AFTER authentication. Why? To prevent unauthenticated bots from consuming rate limit quotas and to apply stricter limits based on user identity.
 
@@ -97,30 +97,30 @@ Layer Breakdown & Technical Decisions:
 
 4. Application Layer (Role-Based Services & Risk Engine)
    
- * Management Service (Human Only): Handles Top-ups, AI Management,payment and Statement generation.
+  * Management Service (Human Only): Handles Top-ups, AI Management,payment and Statement generation.
   
- * Payment Service (AI & Human):
+  * Payment Service (AI & Human):
   
- ■ Risk Engineering (Level 5 - Internal): Evaluates every transaction using Velocity Checks (Redis), Anomaly Detection, and Fraud Scoring.
+    ■ Risk Engineering (Level 5 - Internal): Evaluates every transaction using Velocity Checks (Redis), Anomaly Detection, and Fraud Scoring.
 
- ■ Decisions: ALLOW ➔ Pass | BLOCK ➔ Reject. If CHALLENGE, triggers Step-Up Auth (Human biometric approval).
+    ■ Decisions: ALLOW ➔ Pass | BLOCK ➔ Reject. If CHALLENGE, triggers Step-Up Auth (Human biometric approval).
 
- ■ ACID Transaction: Executes Lock Row ➔ Deduct Funds ➔ Commit in MySQL to prevent race conditions.
+    ■ ACID Transaction: Executes Lock Row ➔ Deduct Funds ➔ Commit in MySQL to prevent race conditions.
 
 
 * Top-up Service (Human Only - Inbound Funds):
   
-  ■ Dedicated service for funding the AI Isolated Wallet. It manages the complex, asynchronous nature of external bank transfers.
+   ■ Dedicated service for funding the AI Isolated Wallet. It manages the complex, asynchronous nature of external bank transfers.
 
-  ■ Webhook Handler: Receives asynchronous callbacks from the Bank API. 
+   ■ Webhook Handler: Receives asynchronous callbacks from the Bank API. 
 
-  ■ Security Decision: Strictly verifies TLS & Webhook Signatures on every callback to prevent malicious actors from spoofing bank responses to falsely credit accounts.
+   ■ Security Decision: Strictly verifies TLS & Webhook Signatures on every callback to prevent malicious actors from spoofing bank responses to falsely credit accounts.
 
-  ■ Polling Mechanism: Resiliency Decision: Because external banks can sometimes drop or delay webhooks, we implement a fallback Polling Handler that periodically checks the bank's status API to ensure no top-up is left in a "pending" state forever.
+   ■ Polling Mechanism: Resiliency Decision: Because external banks can sometimes drop or delay webhooks, we implement a fallback Polling Handler that periodically checks the bank's status API to ensure no top-up is left in a "pending" state forever.
 
-  ■ Bank Reconciliation: Consistency Decision: A dedicated Reconciliation Handler runs periodically to match our internal Aurora ledger with the actual bank statements. This guarantees 100% financial accuracy and automatically unblocks any transactions that got stuck due to network glitches.
+   ■ Bank Reconciliation: Consistency Decision: A dedicated Reconciliation Handler runs periodically to match our internal Aurora ledger with the actual bank statements. This guarantees 100% financial accuracy and automatically unblocks any transactions that got stuck due to network glitches.
 
-  ■ Decision: By isolating these heavy, asynchronous bank integrations (Webhooks/Polling/Reconciliation) into the Top-up Service, we ensure they never cause thread exhaustion or latency in the high-frequency AI Payment Service.
+   ■ Decision: By isolating these heavy, asynchronous bank integrations (Webhooks/Polling/Reconciliation) into the Top-up Service, we ensure they never cause thread exhaustion or latency in the high-frequency AI Payment Service.
 
 
 5. Async Processing Layer (Zero Data Loss & Reconciliation)
@@ -133,40 +133,40 @@ Layer Breakdown & Technical Decisions:
   
 * Background Workers:
   
- ■ Worker (Every 30s): Crucial Consistency Decision. Runs a reconciliation flow every 30 seconds to match internal records with bank webhooks, auto-unblocking stuck payments.
+  ■ Worker (Every 30s): Crucial Consistency Decision. Runs a reconciliation flow every 30 seconds to match internal records with bank webhooks, auto-unblocking stuck payments.
 
- ■ Reliability Equipped with Circuit Breakers, Exponential Backoff, DynamoDB Idempotency and Dead Letter Queues (DLQ).
+  ■ Reliability Equipped with Circuit Breakers, Exponential Backoff, DynamoDB Idempotency and Dead Letter Queues (DLQ).
 
 * Document Generation & Notifications (The Final Step):
   
- ■ Receipt Worker (For AI Payments): Picks up successful tasks from the Receipt Queue. It generates a PDF receipt, uploads it to Amazon S3 (encrypted at rest using AWS KMS), and notifies the AI Agent via WebSocket/Webhook that the payment is complete.
+  ■ Receipt Worker (For AI Payments): Picks up successful tasks from the Receipt Queue. It generates a PDF receipt, uploads it to Amazon S3 (encrypted at rest using AWS KMS), and notifies the AI Agent via WebSocket/Webhook that the payment is complete.
 
- ■ Statement Worker (For Human Top-ups): Picks up successful tasks from the Statement Queue. It generates a PDF statement, uploads it to Amazon S3 (encrypted via AWS KMS), and triggers Amazon SNS to send a success notification (Email/SMS) to the Human Admin.
+  ■ Statement Worker (For Human Top-ups): Picks up successful tasks from the Statement Queue. It generates a PDF statement, uploads it to Amazon S3 (encrypted via AWS KMS), and triggers Amazon SNS to send a success notification (Email/SMS) to the Human Admin.
 
- ■ Decision: PDF generation is CPU-intensive. By decoupling it into dedicated queues, we ensure the core financial transaction is marked "COMPLETED" instantly, while the heavy document processing happens asynchronously in the background.
+  ■ Decision: PDF generation is CPU-intensive. By decoupling it into dedicated queues, we ensure the core financial transaction is marked "COMPLETED" instantly, while the heavy document processing happens asynchronously in the background.
 
 
 7. Data Layer (Multi-Storage & Encryption)
    
- ■ Amazon Aurora MySQL: Source of Truth for Wallets/Transactions (ACID).
+  ■ Amazon Aurora MySQL: Source of Truth for Wallets/Transactions (ACID).
 
- ■ Amazon DynamoDB: High-speed Idempotency Keys (TTL: 7 days) to prevent double-charging during network retries.
+  ■ Amazon DynamoDB: High-speed Idempotency Keys (TTL: 7 days) to prevent double-charging during network retries.
 
- ■ Amazon ElastiCache (Redis): Sub-millisecond Rate Limiting and Fraud Score caching (TTL: 60 seconds to ensure fresh data).
+  ■ Amazon ElastiCache (Redis): Sub-millisecond Rate Limiting and Fraud Score caching (TTL: 60 seconds to ensure fresh data).
 
- ■ AWS KMS (Key Management Service): Security Decision. Enforces Encrypt at Rest, Encrypt in Transit, and automatic Key 
+  ■ AWS KMS (Key Management Service): Security Decision. Enforces Encrypt at Rest, Encrypt in Transit, and automatic Key 
 Rotation for all sensitive financial data.
 
- ■ S3 / Object Store: Secure storage for Receipts, Audit Logs, and Top-up Statements.
+  ■ S3 / Object Store: Secure storage for Receipts, Audit Logs, and Top-up Statements.
 
 
 8. Observability & Reliability
     
- ■ Monitoring: CloudWatch Dashboards and Centralized Logging (CloudWatch Logs / ELK Stack) for deep log analysis.
+  ■ Monitoring: CloudWatch Dashboards and Centralized Logging (CloudWatch Logs / ELK Stack) for deep log analysis.
 
- ■ Alerting: PagerDuty/Slack integration for Critical Errors. Decision: Triggers immediate alert if DLQ > 10 messages, indicating a systemic failure.
+  ■ Alerting: PagerDuty/Slack integration for Critical Errors. Decision: Triggers immediate alert if DLQ > 10 messages, indicating a systemic failure.
 
- ■ Auto-Healing: Health checks every 30s ensure 99.99% uptime.
+  ■ Auto-Healing: Health checks every 30s ensure 99.99% uptime.
 
  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -181,61 +181,61 @@ Figure X: The secure, 17-step Top-Up flow featuring dual idempotency checks, cir
 
 ** Phase 1: API / Management Service (Synchronous Validation)
 
- ■ Step 1: Validate Request. The Management Service checks the JWT (role="root"), validates the amount (e.g., $500 > 0 and < $10,000), and verifies bank account details.
+  ■ Step 1: Validate Request. The Management Service checks the JWT (role="root"), validates the amount (e.g., $500 > 0 and < $10,000), and verifies bank account details.
 
- ■ Step 2: Create Idempotency Key. The server generates a unique key (e.g., idem_topup_xyz789) to track this specific request.
+  ■ Step 2: Create Idempotency Key. The server generates a unique key (e.g., idem_topup_xyz789) to track this specific request.
 
- ■ Step 3: Check Idempotency Key (1st Check). We query DynamoDB. If the status is "COMPLETED", we return the original result immediately. If NOT FOUND, we continue.
+  ■ Step 3: Check Idempotency Key (1st Check). We query DynamoDB. If the status is "COMPLETED", we return the original result immediately. If NOT FOUND, we continue.
 
- ■ Step 4: Push to Top-up Queue (SQS). We return a "status": "PROCESSING" response to the Human instantly, while pushing the payload to the durable SQS queue for background processing.
+  ■ Step 4: Push to Top-up Queue (SQS). We return a "status": "PROCESSING" response to the Human instantly, while pushing the payload to the durable SQS queue for background processing.
 
 ** Phase 2: Top-up Worker (Background Processing & Bank Integration)
 
- ■ Step 5: Check Idempotency Key (2nd Check). The worker queries DynamoDB again to ensure no duplicate processing occurred between Step 3 and now.
+  ■ Step 5: Check Idempotency Key (2nd Check). The worker queries DynamoDB again to ensure no duplicate processing occurred between Step 3 and now.
 
- ■ Step 6: Mark Idempotency = "IN_PROGRESS". We update DynamoDB with a 7-day TTL to lock this transaction.
+  ■ Step 6: Mark Idempotency = "IN_PROGRESS". We update DynamoDB with a 7-day TTL to lock this transaction.
 
- ■ Step 7: Create Transaction in MySQL. We insert a record with Status = 'PENDING'. Crucial Decision: The Wallet Balance remains UNCHANGED at this stage. We do not credit the funds until the bank confirms success.
+  ■ Step 7: Create Transaction in MySQL. We insert a record with Status = 'PENDING'. Crucial Decision: The Wallet Balance remains UNCHANGED at this stage. We do not credit the funds until the bank confirms success.
 
- ■ Step 8: Check Circuit Breaker (Redis). We check if the external Bank API is healthy. If DOWN ➔ Fail fast. If UP ➔ Continue.
+  ■ Step 8: Check Circuit Breaker (Redis). We check if the external Bank API is healthy. If DOWN ➔ Fail fast. If UP ➔ Continue.
 
- ■ Step 9: Call External Bank API (With Resiliency). We execute the transfer.
+  ■ Step 9: Call External Bank API (With Resiliency). We execute the transfer.
 On Failure: We use Exponential Backoff (Wait 1s 2s ➔ 4s). After 3 failures, we move to the Dead Letter Queue (DLQ) and mark status as "FAILED".
 
- ■ On Success: We proceed to Step 10.
+  ■ On Success: We proceed to Step 10.
 
 ** Phase 3: Transaction Finalization & Event Publishing
 
- ■ Step 10: Update Transaction Status = "SUCCESS". We update the MySQL record.
+  ■ Step 10: Update Transaction Status = "SUCCESS". We update the MySQL record.
 
- ■ Step 11: Update Wallet Balance. We credit the amount to the AI Isolated Wallet, update the balance, and record the transaction history.
+  ■ Step 11: Update Wallet Balance. We credit the amount to the AI Isolated Wallet, update the balance, and record the transaction history.
 
- ■ Step 12: Publish Event. We publish an event to Amazon SNS / EventBridge to notify other microservices and trigger analytics.
+  ■ Step 12: Publish Event. We publish an event to Amazon SNS / EventBridge to notify other microservices and trigger analytics.
 
- ■ Step 13: Mark Idempotency = "COMPLETED". We update DynamoDB (TTL: 7 days) to finalize the lock.
+  ■ Step 13: Mark Idempotency = "COMPLETED". We update DynamoDB (TTL: 7 days) to finalize the lock.
 
- ■ Step 14: Delete from Processing Queue. We remove the message from SQS to confirm successful processing.
+  ■ Step 14: Delete from Processing Queue. We remove the message from SQS to confirm successful processing.
 
 ** Phase 4: Notifications, Receipts & Failure Handling
 
- ■ Step 15: Send Success Notification & Generate Receipt.
+  ■ Step 15: Send Success Notification & Generate Receipt.
 A background worker generates a PDF receipt, encrypts it using AWS KMS, and uploads it securely to Amazon S3.
 Simultaneously, we trigger an Email/Notification to the Human Admin confirming the "Top-up Successful! $500".
 
- ■ Step 16: Move to DLQ (If Needed). If the process failed after 3 retries, the task is moved to the DLQ, error details are logged, and an alert is sent to the engineering team.
+  ■ Step 16: Move to DLQ (If Needed). If the process failed after 3 retries, the task is moved to the DLQ, error details are logged, and an alert is sent to the engineering team.
 
- ■ Step 17: End. The process is complete, and all systems are updated.
+  ■ Step 17: End. The process is complete, and all systems are updated.
 
 
 🔄 Bank Integration: Webhooks, Polling, and Reconciliation
 
 Because external banks are notoriously unreliable with callbacks, the Top-up Service implements a multi-layered approach to guarantee funds are never lost:
 
- ■ Webhook Handler: Receives asynchronous callbacks from the Bank API. Strictly verifies TLS & Webhook Signatures to prevent spoofed callbacks.
+  ■ Webhook Handler: Receives asynchronous callbacks from the Bank API. Strictly verifies TLS & Webhook Signatures to prevent spoofed callbacks.
 
- ■ Polling Mechanism: A fallback handler periodically checks the bank's status API to ensure no top-up is left in a "pending" state forever if a webhook is dropped.
+  ■ Polling Mechanism: A fallback handler periodically checks the bank's status API to ensure no top-up is left in a "pending" state forever if a webhook is dropped.
 
- ■ Bank Reconciliation: A dedicated Ledger Worker runs every 30 seconds to match our internal Aurora ledger with the actual bank statements, automatically unblocking any stuck transactions.
+  ■ Bank Reconciliation: A dedicated Ledger Worker runs every 30 seconds to match our internal Aurora ledger with the actual bank statements, automatically unblocking any stuck transactions.
 
  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -252,21 +252,21 @@ Figure X: The 4-Phase AI Payment Flow ensuring ACID compliance, preventing race 
 
 This phase executes in milliseconds to lock the funds and return an immediate response to the AI, preventing it from overspending.
 
- ■ 1: API Gateway Validation. Validates the JWT and routes the request to the Payment Service.
+  ■ 1: API Gateway Validation. Validates the JWT and routes the request to the Payment Service.
 
- ■ 2: Idempotency Check. Checks DynamoDB for the Idempotency-Key (e.g., idem_abc123). If already "COMPLETED", returns the cached result to prevent double-charging.
+  ■ 2: Idempotency Check. Checks DynamoDB for the Idempotency-Key (e.g., idem_abc123). If already "COMPLETED", returns the cached result to prevent double-charging.
 
- ■ 3 & 4: Policy & Balance Check. Validates the AI Spending Policy and checks the Wallet Balance in Redis (sub-millisecond latency).
+  ■ 3 & 4: Policy & Balance Check. Validates the AI Spending Policy and checks the Wallet Balance in Redis (sub-millisecond latency).
 
- ■ Case: If balance < $50, routes to a Ledger Queue for logging and ends immediately.
+  ■ Case: If balance < $50, routes to a Ledger Queue for logging and ends immediately.
 
- ■ Step 5: ACID Transaction (The Critical Lock). Executes a strict MySQL transaction:
+  ■ Step 5: ACID Transaction (The Critical Lock). Executes a strict MySQL transaction:
 
-  • BEGIN; SELECT FOR UPDATE (Lock Row); Re-check balance.
+   • BEGIN; SELECT FOR UPDATE (Lock Row); Re-check balance.
 
-  • UPDATE wallets SET balance = balance - 50;
+   • UPDATE wallets SET balance = balance - 50;
 
-  • INSERT INTO transactions (status='PROCESSING'); COMMIT;
+   • INSERT INTO transactions (status='PROCESSING'); COMMIT;
 
  Decision: SELECT FOR UPDATE physically locks the database row, preventing the AI from spending the same $50 twice in concurrent requests.
 
@@ -277,11 +277,11 @@ This phase executes in milliseconds to lock the funds and return an immediate re
 
  ■ Step 8: Payment Worker. Picks up the task from Queue 1. It re-checks DynamoDB (safety net), checks the Circuit Breaker in Redis (to fail fast if Amazon's API is down), and calls the External Merchant API.
 
-  • Retry Logic (Exponential Backoff): If the API fails, the worker waits 1s ➔ 2s ➔ 4s (with jitter) before retrying.
+   • Retry Logic (Exponential Backoff): If the API fails, the worker waits 1s ➔ 2s ➔ 4s (with jitter) before retrying.
 
  ■ Step 9: Success Path. On success, the result is pushed to Queue 2 (Update Queue).
 
-  • Decision: This extra queue protects MySQL from direct worker pressure, ensuring the database isn't hammered by sudden spikes of successful API callbacks.
+   • Decision: This extra queue protects MySQL from direct worker pressure, ensuring the database isn't hammered by sudden spikes of successful API callbacks.
 
  ■ Step 9b: Failure Path (Automated Refund). If the API fails 3 times, the task moves to the Dead Letter Queue (DLQ) for manual review. Crucially, this triggers an automated rollback: UPDATE wallets SET balance = balance + 50 to refund the locked funds back to the AI.
 
@@ -290,21 +290,21 @@ This phase executes in milliseconds to lock the funds and return an immediate re
 
  ■ Step 10: Background Worker. Picks up the success result from Queue 2.
 
-  • Updates MySQL: UPDATE transactions SET status='COMPLETED' WHERE id='tx_789'.
+   • Updates MySQL: UPDATE transactions SET status='COMPLETED' WHERE id='tx_789'.
 
-  • Marks Idempotency = "COMPLETED" in DynamoDB.
+   • Marks Idempotency = "COMPLETED" in DynamoDB.
 
-  • Pushes the final task to Queue 3 (Receipt Queue).
+   • Pushes the final task to Queue 3 (Receipt Queue).
 
 
 ** Phase 4: Async Path 3 (Receipt Generation & Notification)
 
- ■ Step 11: Receipt Worker. Picks up from Queue 3.
+  ■ Step 11: Receipt Worker. Picks up from Queue 3.
 Generates a PDF Receipt.
 
-  • Uploads the encrypted PDF to Amazon S3 (via AWS KMS).
+   • Uploads the encrypted PDF to Amazon S3 (via AWS KMS).
 
-  • Notifies the AI Agent via WebSocket / Webhook that the "Payment Completed!"
+   • Notifies the AI Agent via WebSocket / Webhook that the "Payment Completed!"
 END.
 
 <img width="1536" height="1024" alt="PAY " src="https://github.com/user-attachments/assets/e1699b26-0989-41a0-a9c1-63af91555981" />
@@ -324,15 +324,15 @@ Figure 3: Complete AWS Architecture showing the dual-path execution, async proce
 Before any business logic is executed, all traffic passes through a strict security and authentication gauntlet:
 Edge Routing: Traffic enters via Amazon Route 53 and passes through AWS WAF to block malicious IP addresses and DDoS attacks.
 
- ■ TLS Termination: The Application Load Balancer (ALB) terminates SSL/TLS using AWS ACM, ensuring all data is encrypted in transit.
+  ■ TLS Termination: The Application Load Balancer (ALB) terminates SSL/TLS using AWS ACM, ensuring all data is encrypted in transit.
 
- ■ Identity Management (Amazon Cognito):
+  ■ Identity Management (Amazon Cognito):
 
-  • Human: Authenticates via Biometric + Password verification.
+   • Human: Authenticates via Biometric + Password verification.
 
-  • AI Agent: Authenticates via restricted AaSN API Key validation.
+   • AI Agent: Authenticates via restricted AaSN API Key validation.
 
-  • Issues short-lived JWTs and Refresh Tokens.
+   • Issues short-lived JWTs and Refresh Tokens.
 
  ■ API Gateway: Validates the JWT signature and expiry. Crucially, it enforces User Rate Limiting using a Redis Token Bucket to prevent API abuse before the request reaches the microservices.
 
@@ -346,13 +346,13 @@ Optimized for security, external bank integration, and human notification.
    
 3. Top-up Worker (Lambda):
    
- • Marks the Idempotency Key as "IN_PROGRESS" in DynamoDB.
+  • Marks the Idempotency Key as "IN_PROGRESS" in DynamoDB.
 
- • Creates a PENDING transaction in Aurora MySQL.
+  • Creates a PENDING transaction in Aurora MySQL.
 
- • Checks the Circuit Breaker in ElastiCache (Redis). If the bank is healthy, it calls the External Bank API via the NAT Gateway.
+  • Checks the Circuit Breaker in ElastiCache (Redis). If the bank is healthy, it calls the External Bank API via the NAT Gateway.
 
- • Resiliency: Implements exponential backoff retries (1s ➔ 2s ➔ 4s). On the 3rd failure, it pushes to the SQS Dead Letter Queue (DLQ).
+  • Resiliency: Implements exponential backoff retries (1s ➔ 2s ➔ 4s). On the 3rd failure, it pushes to the SQS Dead Letter Queue (DLQ).
 
 4. Database Finalization: Upon bank success, Aurora MySQL credits the wallet (balance = balance + 500) and updates the transaction to "COMPLETED". It also checks the Ledger Queue to auto-unblock any stuck payments.
    
@@ -385,13 +385,13 @@ Optimized for high-frequency, low-latency transactions and strict ACID complianc
 
 To ensure 99.99% uptime and rapid incident response, the architecture is wrapped in a comprehensive observability layer:
 
- ■ Auto-Healing & Auto-Scaling: ALB performs health checks every 30 seconds, automatically replacing failed instances and scaling compute resources during traffic spikes.
+   ■ Auto-Healing & Auto-Scaling: ALB performs health checks every 30 seconds, automatically replacing failed instances and scaling compute resources during traffic spikes.
 
- ■ Centralized Logging: AWS X-Ray provides distributed tracing, while logs are aggregated in CloudWatch Logs for deep analysis.
+   ■ Centralized Logging: AWS X-Ray provides distributed tracing, while logs are aggregated in CloudWatch Logs for deep analysis.
 
- ■ Critical Alerting: CloudWatch Alarms are integrated with PagerDuty/Slack. If the SQS DLQ exceeds 10 messages, an immediate critical alert is fired to the engineering team.
+   ■ Critical Alerting: CloudWatch Alarms are integrated with PagerDuty/Slack. If the SQS DLQ exceeds 10 messages, an immediate critical alert is fired to the engineering team.
 
- ■ Event-Driven Routing: Amazon EventBridge routes system events to trigger downstream microservices and analytics pipelines seamlessly.
+   ■ Event-Driven Routing: Amazon EventBridge routes system events to trigger downstream microservices and analytics pipelines seamlessly.
 
  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
